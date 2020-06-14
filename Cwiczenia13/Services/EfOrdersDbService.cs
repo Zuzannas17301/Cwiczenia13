@@ -1,9 +1,9 @@
 ﻿
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Cwiczenia13.DTOs.Requests;
-using Cwiczenia13.DTOs.Responses;
 using Cwiczenia13.Models;
 using Microsoft.AspNetCore.Mvc;
 
@@ -19,52 +19,58 @@ namespace Cwiczenia13.Services
             _context = context;
         }
         
-        public List<GetOrdersResponse> GetOrders()
+        public IEnumerable GetOrders()
         {
-            var result = (from Zamowienie in _context.Zamowienie
-                join Zamowienie_WyrobCukierniczy in _context.Zamowienie_WyrobCukierniczy on Zamowienie.IdZamowienia
-                    equals Zamowienie_WyrobCukierniczy.IdZamowienia
-                        join WyrobCukierniczy in _context.WyrobCukierniczy on Zamowienie_WyrobCukierniczy.IdWyrobuCukierniczego equals WyrobCukierniczy.IdWyrobuCukierniczego
-                orderby Zamowienie.IdZamowienia
-                select new GetOrdersResponse()
-                {
-                    IdZamowienie = Zamowienie.IdZamowienia,
-                    DataPrzyjecia = Zamowienie.DataPrzyjecia,
-                    DataRealizacji = Zamowienie.DataRealizacji,
-                    Ilosc = Zamowienie_WyrobCukierniczy.Ilosc,
-                    NazwaWyrobuCukierniczego = WyrobCukierniczy.Nazwa,
-                    CenaZaSzt = WyrobCukierniczy.CenaZaSzt
-                }).ToList();
+            var result = _context.Zamowienie.Select(e => new
+            {
+                e.IdZamowienia,
+                e.DataPrzyjecia,
+                e.DataRealizacji,
+                e.Uwagi,
+                wyroby = e.Zamowienie_WyrobCukierniczy.Join(_context.WyrobCukierniczy, zw => zw.IdWyrobuCukierniczego,
+                    wyr => wyr.IdWyrobuCukierniczego,
+                    (zw, wyr) => new
+                    {
+                        wyr.Nazwa,
+                        wyr.CenaZaSzt,
+                        wyr.Typ,
+                        zw.Ilosc,
+                        zw.Uwagi
+                    })
+            }).ToList();
+                
             
             return result;
         }
 
-        public IEnumerable<GetOrdersResponse> GetOrders(string Nazwisko)
+        public IEnumerable GetOrders(string Nazwisko)
         {
-            List<GetOrdersResponse> result = null;
+           // List<GetOrdersResponse> result = null;
             
             var klient = _context.Klient.Any(e => e.Nazwisko == Nazwisko);
 
-            if (klient)
-                {
-                    result = (from Zamowienie in _context.Zamowienie
-                        join Zamowienie_WyrobCukierniczy in _context.Zamowienie_WyrobCukierniczy on Zamowienie.IdZamowienia
-                            equals Zamowienie_WyrobCukierniczy.IdZamowienia
-                        join WyrobCukierniczy in _context.WyrobCukierniczy on Zamowienie_WyrobCukierniczy
-                                .IdWyrobuCukierniczego
-                            equals WyrobCukierniczy.IdWyrobuCukierniczego
-                            where Zamowienie.Klient.Nazwisko == Nazwisko
-                        orderby Zamowienie.IdZamowienia
-                        select new GetOrdersResponse()
-                        {
-                            IdZamowienie = Zamowienie.IdZamowienia,
-                            DataPrzyjecia = Zamowienie.DataPrzyjecia,
-                            DataRealizacji = Zamowienie.DataRealizacji,
-                            Ilosc = Zamowienie_WyrobCukierniczy.Ilosc,
-                            NazwaWyrobuCukierniczego = WyrobCukierniczy.Nazwa,
-                            CenaZaSzt = WyrobCukierniczy.CenaZaSzt
-                        }).ToList();
-                }
+            if (klient== false)
+                throw new Exception("Taki klient nie istnieje w bazie!");
+                
+                   var result = _context.Zamowienie.Where(e=>e.Klient.Nazwisko.Equals(Nazwisko))
+                       .Select(e => new
+                   {
+                       e.IdZamowienia,
+                       e.DataPrzyjecia,
+                       e.DataRealizacji,
+                       e.Uwagi,
+                       wyroby = e.Zamowienie_WyrobCukierniczy.Join(_context.WyrobCukierniczy, zw => zw.IdWyrobuCukierniczego,
+                           wyr => wyr.IdWyrobuCukierniczego,
+                           (zw, wyr) => new
+                           {
+                               wyr.Nazwa,
+                               wyr.CenaZaSzt,
+                               wyr.Typ,
+                               zw.Ilosc,
+                               zw.Uwagi
+                           })
+                   }).ToList();
+                
             
             return result;
         }
@@ -76,31 +82,29 @@ namespace Cwiczenia13.Services
 
            if (!res)
            {
-               return new BadRequestObjectResult("Nie ma takiego klienta w bazie!");
+              throw new Exception("Taki klient nie istnieje w bazie");
            }
-           else
-           {
+          
                //czy podane wyroby cukiernicze sa produkiwane w cukierni
-               foreach (Wyrob wyrob in request.Wyroby)
-               {
-                   var res2 = _context.WyrobCukierniczy.Any(e => e.Nazwa == wyrob.wyrob);
-                   if(!res2)
-                       return new BadRequestObjectResult("Nie ma takiego wyrobu w bazie!");
-               }
+            foreach (Wyrob wyrob in request.Wyroby)
+            { 
+                var res2 = _context.WyrobCukierniczy.Any(e => e.Nazwa == wyrob.wyrob); 
+                if(!res2) 
+                    throw new Exception("Taki wyrób nie jest produkowany przez cukiernię");
+            }
 
-               var response = new Zamowienie {DataPrzyjecia = request.DataPrzyjecia, Uwagi = request.Uwagi, IdKlient = klientId, IdPracownik = 1, Zamowienie_WyrobCukierniczy = new List<Zamowienie_WyrobCukierniczy>()};
-               foreach (Wyrob wyrob in request.Wyroby)
-               {
-                   int id = _context.WyrobCukierniczy.FirstOrDefault(e => e.Nazwa == wyrob.wyrob).IdWyrobuCukierniczego;
-                   response.Zamowienie_WyrobCukierniczy.Add(new Zamowienie_WyrobCukierniczy{IdWyrobuCukierniczego = id, Uwagi = wyrob.uwagi, Ilosc = wyrob.ilosc});
-               }
+            var response = new Zamowienie {DataPrzyjecia = request.DataPrzyjecia, Uwagi = request.Uwagi, IdKlient = klientId, IdPracownik = 1, Zamowienie_WyrobCukierniczy = new List<Zamowienie_WyrobCukierniczy>()}; 
+            foreach (Wyrob wyrob in request.Wyroby) 
+            { 
+                int id = _context.WyrobCukierniczy.FirstOrDefault(e => e.Nazwa == wyrob.wyrob).IdWyrobuCukierniczego; 
+                response.Zamowienie_WyrobCukierniczy.Add(new Zamowienie_WyrobCukierniczy{IdWyrobuCukierniczego = id, Uwagi = wyrob.uwagi, Ilosc = wyrob.ilosc});
+            }
 
-               _context.Add(response);
-               _context.SaveChanges();
+            _context.Add(response);
+            _context.SaveChanges();
 
-               return new OkObjectResult("Pomyślnie dodano nowe zamówienie do bazy");
-           }
-           
+            return new OkObjectResult("Pomyślnie dodano nowe zamówienie do bazy");
+
         }
     }
 }
