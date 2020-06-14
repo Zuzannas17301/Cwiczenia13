@@ -70,7 +70,6 @@ namespace Cwiczenia13.Models
                 builder.HasKey(e => e.IdZamowienia);
                 builder.Property(e => e.IdZamowienia).ValueGeneratedOnAdd();
                 builder.Property(e => e.DataPrzyjecia).IsRequired();
-                builder.Property(e => e.DataRealizacji).IsRequired();
                 builder.Property(e => e.Uwagi).HasMaxLength(300);
 
                 builder.HasMany(e => e.Zamowienie_WyrobCukierniczy)
